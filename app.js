@@ -78,7 +78,18 @@ const productsCollection = collection(db, `artifacts/${appId}/public/data/produc
 const historyCollection = collection(db, `artifacts/${appId}/public/data/history`);
 
 function listenToData() {
-    onSnapshot(query(productsCollection), (snapshot) => { allProducts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a, b) => a.name.localeCompare(b.name)); UI.updateCategoryDropdowns(); UI.renderProducts(); });
+    // --- FITUR BARU: Menampilkan status memuat data ---
+    const loadingRowProducts = '<tr><td colspan="4" class="text-center py-10 text-slate-400"><span class="animate-pulse">Memuat data produk...</span></td></tr>';
+    const loadingRowHistory = '<tr><td colspan="5" class="text-center py-10 text-slate-400"><span class="animate-pulse">Memuat riwayat...</span></td></tr>';
+    DOMElements.productListEl.innerHTML = loadingRowProducts;
+    DOMElements.historyListEl.innerHTML = loadingRowHistory;
+    // --- AKHIR FITUR BARU ---
+
+    onSnapshot(query(productsCollection), (snapshot) => {
+        allProducts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a, b) => a.name.localeCompare(b.name));
+        UI.updateCategoryDropdowns();
+        UI.renderProducts(); // This will replace the loading indicator
+    });
     onSnapshot(query(historyCollection), (snapshot) => {
         const changes = snapshot.docChanges();
         if (!isInitialHistoryLoad) {
@@ -92,6 +103,7 @@ function listenToData() {
             });
         }
         allHistories = snapshot.docs.map(doc => doc.data()).sort((a, b) => b.timestamp.seconds - a.timestamp.seconds); 
+        // This will replace the loading indicator
         DOMElements.historyListEl.innerHTML = allHistories.length === 0 ? '<tr><td colspan="5" class="text-center py-10 text-slate-400">Belum ada riwayat.</td></tr>' : allHistories.map(entry => { const date = new Date(entry.timestamp.seconds * 1000).toLocaleString('id-ID'); const isAddition = entry.type.includes('penambahan'); return `<tr><td class="px-6 py-4 text-sm text-slate-400">${date}</td><td class="px-6 py-4 text-sm font-medium text-white">${entry.productName}</td><td class="px-6 py-4 text-sm font-semibold ${isAddition ? 'text-green-500' : 'text-red-500'}">${entry.type}</td><td class="px-6 py-4 text-sm font-semibold ${isAddition ? 'text-green-500' : 'text-red-500'}">${isAddition ? '+' : '-'}${entry.amount}</td><td class="px-6 py-4 text-sm text-white font-medium" title="ID: ${entry.userId}">${entry.userName || 'Tanpa Nama'}</td></tr>`; }).join('');
         isInitialHistoryLoad = false;
     });
@@ -109,6 +121,7 @@ DOMElements.exportHistoryBtn.addEventListener('click', () => exportToCsv(`riwaya
 DOMElements.categorySelect.addEventListener('change', (e) => { DOMElements.newCategoryInput.classList.toggle('hidden', e.target.value !== '--new--'); });
 DOMElements.nameForm.addEventListener('submit', (e) => { e.preventDefault(); const name = DOMElements.userNameInput.value.trim(); if (name) { userName = name; localStorage.setItem('inventoryUserName', userName); DOMElements.userNameDisplay.textContent = userName; UI.closeModal(DOMElements.nameModal); } });
 DOMElements.productListEl.addEventListener('click', (e) => { const btn = e.target.closest('button'); if (!btn) return; const id = btn.dataset.id; const product = allProducts.find(p => p.id === id); if (btn.classList.contains('edit-btn')) { if (product) UI.showEditModal(product); } else if (btn.classList.contains('delete-btn')) { UI.showDeleteConfirm(btn.dataset.name, async (ok) => { if (ok) { try { await deleteDoc(doc(db, `artifacts/${appId}/public/data/products`, id)); UI.showToast(`Produk "${btn.dataset.name}" dihapus.`, 'success'); } catch (err) { UI.showToast("Gagal hapus produk.", "error"); } } }); } });
+
 DOMElements.editProductForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const id = DOMElements.editProductForm.editProductId.value;
@@ -125,7 +138,6 @@ DOMElements.editProductForm.addEventListener('submit', async (e) => {
     try {
         const ref = doc(db, `artifacts/${appId}/public/data/products`, id);
         await runTransaction(db, async (t) => {
-        
             t.update(ref, {
                 name: newName,
                 normalizedName: normalizedNewName,
@@ -152,6 +164,7 @@ DOMElements.productForm.addEventListener('submit', async (e) => {
     const amount = parseFloat(DOMElements.productForm.changeAmount.value);
     const minStock = parseFloat(DOMElements.productForm.minStock.value);
 
+    // Fitur 3: Validasi Input
     if (!productName || !category) {
         return UI.showToast("Nama produk dan kategori harus diisi.", "error");
     }
@@ -162,16 +175,20 @@ DOMElements.productForm.addEventListener('submit', async (e) => {
         return UI.showToast("Stok minimum harus berupa angka 0 atau lebih.", "error");
     }
 
-   
     const normalizedProductName = productName.toLowerCase().replace(/\s+/g, ' ').trim();
 
+    // Fitur 2: Nonaktifkan Tombol
     const addBtn = document.querySelector('button[data-action="add"]');
     const subtractBtn = document.querySelector('button[data-action="subtract"]');
+    const originalAddText = addBtn.innerHTML;
+    const originalSubtractText = subtractBtn.innerHTML;
+
     addBtn.disabled = true;
     subtractBtn.disabled = true;
+    addBtn.innerHTML = '<span class="animate-pulse">Menyimpan...</span>';
+    subtractBtn.innerHTML = '<span class="animate-pulse">Menyimpan...</span>';
 
     try {
-    
         const productQuery = query(collection(db, `artifacts/${appId}/public/data/products`), where("normalizedName", "==", normalizedProductName));
         const snapshot = await getDocs(productQuery);
         const existingDoc = snapshot.docs[0];
@@ -193,10 +210,9 @@ DOMElements.productForm.addEventListener('submit', async (e) => {
             } else {
                 if (action === 'subtract') throw "Tidak bisa mengurangi stok produk baru.";
                 const newProductRef = doc(collection(db, `artifacts/${appId}/public/data/products`));
-            
                 transaction.set(newProductRef, {
-                    name: productName, 
-                    normalizedName: normalizedProductName, 
+                    name: productName,
+                    normalizedName: normalizedProductName,
                     category,
                     stock: amount,
                     minStock,
@@ -214,16 +230,7 @@ DOMElements.productForm.addEventListener('submit', async (e) => {
         console.error("Transaction failed: ", error);
         UI.showToast(typeof error === 'string' ? error : "Gagal memproses transaksi.", "error");
     } finally {
-        addBtn.disabled = false;
-        subtractBtn.disabled = false;
-    }
-});
-        UI.showToast(`Stok untuk "${productName}" berhasil diupdate.`, "success");
-        UI.resetForm();
-    } catch (error) {
-        console.error("Transaction failed: ", error);
-        UI.showToast(typeof error === 'string' ? error : "Gagal memproses transaksi.", "error");
-    } finally {
+        // Fitur 2: Aktifkan kembali tombol
         addBtn.disabled = false;
         subtractBtn.disabled = false;
         addBtn.innerHTML = originalAddText;
