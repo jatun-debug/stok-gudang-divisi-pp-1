@@ -121,7 +121,6 @@ DOMElements.exportHistoryBtn.addEventListener('click', () => exportToCsv(`riwaya
 DOMElements.categorySelect.addEventListener('change', (e) => { DOMElements.newCategoryInput.classList.toggle('hidden', e.target.value !== '--new--'); });
 DOMElements.nameForm.addEventListener('submit', (e) => { e.preventDefault(); const name = DOMElements.userNameInput.value.trim(); if (name) { userName = name; localStorage.setItem('inventoryUserName', userName); DOMElements.userNameDisplay.textContent = userName; UI.closeModal(DOMElements.nameModal); } });
 DOMElements.productListEl.addEventListener('click', (e) => { const btn = e.target.closest('button'); if (!btn) return; const id = btn.dataset.id; const product = allProducts.find(p => p.id === id); if (btn.classList.contains('edit-btn')) { if (product) UI.showEditModal(product); } else if (btn.classList.contains('delete-btn')) { UI.showDeleteConfirm(btn.dataset.name, async (ok) => { if (ok) { try { await deleteDoc(doc(db, `artifacts/${appId}/public/data/products`, id)); UI.showToast(`Produk "${btn.dataset.name}" dihapus.`, 'success'); } catch (err) { UI.showToast("Gagal hapus produk.", "error"); } } }); } });
-
 DOMElements.editProductForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const id = DOMElements.editProductForm.editProductId.value;
