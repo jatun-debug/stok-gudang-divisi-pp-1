@@ -119,7 +119,6 @@ DOMElements.productForm.addEventListener('submit', async (e) => {
     let category = DOMElements.categorySelect.value;
     if (category === '--new--') category = DOMElements.newCategoryInput.value.trim();
     
-    // Konversi ke angka, bukan integer, untuk menangani nilai desimal jika perlu
     const amount = parseFloat(DOMElements.productForm.changeAmount.value);
     const minStock = parseFloat(DOMElements.productForm.minStock.value);
 
@@ -133,20 +132,71 @@ DOMElements.productForm.addEventListener('submit', async (e) => {
     if (isNaN(minStock) || minStock < 0) {
         return UI.showToast("Stok minimum harus berupa angka 0 atau lebih.", "error");
     }
-    // --- AKHIR PERBAIKAN VALIDASI ---
 
-    // --- PERBAIKAN FEEDBACK PENGGUNA (POIN 3) ---
+    const normalizedProductName = productName.toLowerCase().replace(/\s+/g, ' ').trim();
+
     const addBtn = document.querySelector('button[data-action="add"]');
     const subtractBtn = document.querySelector('button[data-action="subtract"]');
     const originalAddText = addBtn.innerHTML;
     const originalSubtractText = subtractBtn.innerHTML;
 
-    // Nonaktifkan tombol saat proses dimulai
     addBtn.disabled = true;
     subtractBtn.disabled = true;
     addBtn.innerHTML = '<span class="animate-pulse">Menyimpan...</span>';
     subtractBtn.innerHTML = '<span class="animate-pulse">Menyimpan...</span>';
-    // --- AKHIR PERBAIKAN FEEDBACK ---
+
+    try {
+       
+        const productQuery = query(collection(db, `artifacts/${appId}/public/data/products`), where("normalizedName", "==", normalizedProductName));
+        const snapshot = await getDocs(productQuery);
+        const existingDoc = snapshot.docs[0];
+
+        await runTransaction(db, async (transaction) => {
+            let historyType = '';
+            
+            if (existingDoc) {
+                const productRef = existingDoc.ref;
+                const productData = (await transaction.get(productRef)).data();
+                if (action === 'add') {
+                    transaction.update(productRef, { stock: productData.stock + amount });
+                    historyType = 'penambahan';
+                } else {
+                    if (productData.stock < amount) throw `Stok tidak mencukupi: ${productData.stock}.`;
+                    transaction.update(productRef, { stock: productData.stock - amount });
+                    historyType = 'pengurangan';
+                }
+            } else {
+                if (action === 'subtract') throw "Tidak bisa mengurangi stok produk baru.";
+                const newProductRef = doc(collection(db, `artifacts/${appId}/public/data/products`));
+            
+                transaction.set(newProductRef, {
+                    name: productName,
+                    normalizedName: normalizedProductName,
+                    category,
+                    stock: amount,
+                    minStock,
+                    createdAt: serverTimestamp()
+                });
+                historyType = 'penambahan (baru)';
+            }
+            const newHistoryRef = doc(collection(db, `artifacts/${appId}/public/data/history`));
+            transaction.set(newHistoryRef, { productName, type: historyType, amount, userId: userId, userName: userName, timestamp: serverTimestamp() });
+        });
+
+        UI.showToast(`Stok untuk "${productName}" berhasil diupdate.`, "success");
+        UI.resetForm();
+    } catch (error) {
+        console.error("Transaction failed: ", error);
+        UI.showToast(typeof error === 'string' ? error : "Gagal memproses transaksi.", "error");
+    } finally {
+        
+        addBtn.disabled = false;
+        subtractBtn.disabled = false;
+        addBtn.innerHTML = originalAddText;
+        subtractBtn.innerHTML = originalSubtractText;
+      
+    }
+});
 
     try {
         const productQuery = query(collection(db, `artifacts/${appId}/public/data/products`), where("name", "==", productName));
@@ -183,13 +233,11 @@ DOMElements.productForm.addEventListener('submit', async (e) => {
         console.error("Transaction failed: ", error);
         UI.showToast(typeof error === 'string' ? error : "Gagal memproses transaksi.", "error");
     } finally {
-        // --- PERBAIKAN FEEDBACK PENGGUNA (POIN 3) ---
-        // Apapun hasilnya (sukses atau gagal), kembalikan tombol ke keadaan semula
+     
         addBtn.disabled = false;
         subtractBtn.disabled = false;
         addBtn.innerHTML = originalAddText;
         subtractBtn.innerHTML = originalSubtractText;
-        // --- AKHIR PERBAIKAN FEEDBACK ---
     }
 });
 
