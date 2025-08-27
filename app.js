@@ -109,7 +109,6 @@ DOMElements.exportHistoryBtn.addEventListener('click', () => exportToCsv(`riwaya
 DOMElements.categorySelect.addEventListener('change', (e) => { DOMElements.newCategoryInput.classList.toggle('hidden', e.target.value !== '--new--'); });
 DOMElements.nameForm.addEventListener('submit', (e) => { e.preventDefault(); const name = DOMElements.userNameInput.value.trim(); if (name) { userName = name; localStorage.setItem('inventoryUserName', userName); DOMElements.userNameDisplay.textContent = userName; UI.closeModal(DOMElements.nameModal); } });
 DOMElements.productListEl.addEventListener('click', (e) => { const btn = e.target.closest('button'); if (!btn) return; const id = btn.dataset.id; const product = allProducts.find(p => p.id === id); if (btn.classList.contains('edit-btn')) { if (product) UI.showEditModal(product); } else if (btn.classList.contains('delete-btn')) { UI.showDeleteConfirm(btn.dataset.name, async (ok) => { if (ok) { try { await deleteDoc(doc(db, `artifacts/${appId}/public/data/products`, id)); UI.showToast(`Produk "${btn.dataset.name}" dihapus.`, 'success'); } catch (err) { UI.showToast("Gagal hapus produk.", "error"); } } }); } });
-
 DOMElements.editProductForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const id = DOMElements.editProductForm.editProductId.value;
@@ -126,6 +125,7 @@ DOMElements.editProductForm.addEventListener('submit', async (e) => {
     try {
         const ref = doc(db, `artifacts/${appId}/public/data/products`, id);
         await runTransaction(db, async (t) => {
+        
             t.update(ref, {
                 name: newName,
                 normalizedName: normalizedNewName,
@@ -162,19 +162,16 @@ DOMElements.productForm.addEventListener('submit', async (e) => {
         return UI.showToast("Stok minimum harus berupa angka 0 atau lebih.", "error");
     }
 
+   
     const normalizedProductName = productName.toLowerCase().replace(/\s+/g, ' ').trim();
 
     const addBtn = document.querySelector('button[data-action="add"]');
     const subtractBtn = document.querySelector('button[data-action="subtract"]');
-    const originalAddText = addBtn.innerHTML;
-    const originalSubtractText = subtractBtn.innerHTML;
-
     addBtn.disabled = true;
     subtractBtn.disabled = true;
-    addBtn.innerHTML = '<span class="animate-pulse">Menyimpan...</span>';
-    subtractBtn.innerHTML = '<span class="animate-pulse">Menyimpan...</span>';
 
     try {
+    
         const productQuery = query(collection(db, `artifacts/${appId}/public/data/products`), where("normalizedName", "==", normalizedProductName));
         const snapshot = await getDocs(productQuery);
         const existingDoc = snapshot.docs[0];
@@ -196,9 +193,10 @@ DOMElements.productForm.addEventListener('submit', async (e) => {
             } else {
                 if (action === 'subtract') throw "Tidak bisa mengurangi stok produk baru.";
                 const newProductRef = doc(collection(db, `artifacts/${appId}/public/data/products`));
+            
                 transaction.set(newProductRef, {
-                    name: productName,
-                    normalizedName: normalizedProductName,
+                    name: productName, 
+                    normalizedName: normalizedProductName, 
                     category,
                     stock: amount,
                     minStock,
@@ -210,6 +208,16 @@ DOMElements.productForm.addEventListener('submit', async (e) => {
             transaction.set(newHistoryRef, { productName, type: historyType, amount, userId: userId, userName: userName, timestamp: serverTimestamp() });
         });
 
+        UI.showToast(`Stok untuk "${productName}" berhasil diupdate.`, "success");
+        UI.resetForm();
+    } catch (error) {
+        console.error("Transaction failed: ", error);
+        UI.showToast(typeof error === 'string' ? error : "Gagal memproses transaksi.", "error");
+    } finally {
+        addBtn.disabled = false;
+        subtractBtn.disabled = false;
+    }
+});
         UI.showToast(`Stok untuk "${productName}" berhasil diupdate.`, "success");
         UI.resetForm();
     } catch (error) {
