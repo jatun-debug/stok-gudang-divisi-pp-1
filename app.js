@@ -33,6 +33,9 @@ const DOMElements = {
     cancelEdit: document.getElementById('cancelEdit'),
     exportProductsBtn: document.getElementById('exportProductsBtn'),
     exportHistoryBtn: document.getElementById('exportHistoryBtn'),
+    // --- Elemen baru untuk saran produk
+    productNameInput: document.getElementById('productName'),
+    productSuggestions: document.getElementById('productSuggestions')
 };
 
 const UI = {
@@ -68,6 +71,43 @@ const UI = {
         const categories = [...new Set(allProducts.map(p => p.category))].sort();
         if (element) { element.innerHTML = ''; categories.forEach(cat => element.innerHTML += `<option value="${cat}">${cat}</option>`); if (selectedValue) element.value = selectedValue; } 
         else { this.updateCategoryDropdowns(DOMElements.categoryFilter, DOMElements.categoryFilter.value); DOMElements.categoryFilter.insertAdjacentHTML('afterbegin', '<option value="all">Semua Kategori</option>'); this.updateCategoryDropdowns(DOMElements.categorySelect, DOMElements.categorySelect.value); DOMElements.categorySelect.insertAdjacentHTML('beforeend', '<option value="">Pilih Kategori</option><option value="--new--">-- Tambah Baru --</option>'); }
+    },
+    // --- Fungsi baru untuk merender saran produk
+    renderProductSuggestions(searchTerm) {
+        const normalizedSearchTerm = searchTerm.toLowerCase().trim();
+        const productNames = [...new Set(allProducts.map(p => p.name))].sort();
+        const filteredNames = productNames.filter(name => name.toLowerCase().includes(normalizedSearchTerm));
+        
+        DOMElements.productSuggestions.innerHTML = '';
+        
+        if (filteredNames.length > 0 && normalizedSearchTerm.length > 0) {
+            filteredNames.forEach(name => {
+                const suggestionEl = document.createElement('div');
+                suggestionEl.className = 'flex items-center justify-between px-3 py-2 text-slate-200 hover:bg-slate-600 cursor-pointer';
+                suggestionEl.innerHTML = `
+                    <span class="suggestion-text">${name}</span>
+                    <button type="button" class="delete-suggestion text-slate-400 hover:text-red-500" data-name="${name}">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+                        </svg>
+                    </button>
+                `;
+                DOMElements.productSuggestions.appendChild(suggestionEl);
+                
+                // Tambahkan event listener untuk memilih produk
+                suggestionEl.querySelector('.suggestion-text').addEventListener('click', (e) => {
+                    DOMElements.productNameInput.value = name;
+                    UI.hideSuggestions();
+                });
+            });
+            DOMElements.productSuggestions.classList.remove('hidden');
+        } else {
+            UI.hideSuggestions();
+        }
+    },
+    // --- Fungsi baru untuk menyembunyikan saran
+    hideSuggestions() {
+        DOMElements.productSuggestions.classList.add('hidden');
     },
     resetForm() { DOMElements.productForm.reset(); DOMElements.newCategoryInput.classList.add('hidden'); }
 };
@@ -106,13 +146,10 @@ function listenToData() {
     });
 }
 
-// --- FUNGSI BARU UNTUK EKSPOR XLSX ---
 function exportToXlsx(filename, rows) {
     if (rows.length === 0) {
         return UI.showToast("Tidak ada data untuk diekspor.", "error");
     }
-    
-    // Ganti nama properti timestamp menjadi 'Waktu' agar lebih mudah dibaca di Excel
     const dataToExport = rows.map(row => {
       const newRow = { ...row };
       if (newRow.timestamp && newRow.timestamp.seconds) {
@@ -121,14 +158,11 @@ function exportToXlsx(filename, rows) {
       }
       return newRow;
     });
-    
     const worksheet = XLSX.utils.json_to_sheet(dataToExport);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Data");
-    
     XLSX.writeFile(workbook, filename);
 }
-// --- AKHIR FUNGSI BARU ---
 
 // --- Event Listeners ---
 DOMElements.searchInput.addEventListener('input', UI.renderProducts);
@@ -250,6 +284,38 @@ DOMElements.productForm.addEventListener('submit', async (e) => {
         subtractBtn.disabled = false;
         addBtn.innerHTML = originalAddText;
         subtractBtn.innerHTML = originalSubtractText;
+    }
+});
+
+// --- Event listeners baru untuk saran produk
+DOMElements.productNameInput.addEventListener('input', (e) => {
+    UI.renderProductSuggestions(e.target.value);
+});
+
+DOMElements.productSuggestions.addEventListener('click', (e) => {
+    const btn = e.target.closest('.delete-suggestion');
+    if (btn) {
+        const productName = btn.dataset.name;
+        UI.showDeleteConfirm(productName, async (ok) => {
+            if (ok) {
+                const productToDelete = allProducts.find(p => p.name === productName);
+                if (productToDelete) {
+                    try {
+                        await deleteDoc(doc(db, `artifacts/${appId}/public/data/products`, productToDelete.id));
+                        UI.showToast(`Produk "${productName}" dihapus.`, 'success');
+                    } catch (err) {
+                        UI.showToast("Gagal hapus produk.", "error");
+                    }
+                }
+            }
+        });
+    }
+});
+
+// Sembunyikan saran jika klik di luar
+document.addEventListener('click', (e) => {
+    if (!DOMElements.productForm.contains(e.target)) {
+        UI.hideSuggestions();
     }
 });
 
