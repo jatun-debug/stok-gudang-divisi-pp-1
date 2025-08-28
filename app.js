@@ -78,17 +78,15 @@ const productsCollection = collection(db, `artifacts/${appId}/public/data/produc
 const historyCollection = collection(db, `artifacts/${appId}/public/data/history`);
 
 function listenToData() {
-    // --- FITUR BARU: Menampilkan status memuat data ---
     const loadingRowProducts = '<tr><td colspan="4" class="text-center py-10 text-slate-400"><span class="animate-pulse">Memuat data produk...</span></td></tr>';
     const loadingRowHistory = '<tr><td colspan="5" class="text-center py-10 text-slate-400"><span class="animate-pulse">Memuat riwayat...</span></td></tr>';
     DOMElements.productListEl.innerHTML = loadingRowProducts;
     DOMElements.historyListEl.innerHTML = loadingRowHistory;
-    // --- AKHIR FITUR BARU ---
 
     onSnapshot(query(productsCollection), (snapshot) => {
         allProducts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a, b) => a.name.localeCompare(b.name));
         UI.updateCategoryDropdowns();
-        UI.renderProducts(); // This will replace the loading indicator
+        UI.renderProducts();
     });
     onSnapshot(query(historyCollection), (snapshot) => {
         const changes = snapshot.docChanges();
@@ -103,21 +101,42 @@ function listenToData() {
             });
         }
         allHistories = snapshot.docs.map(doc => doc.data()).sort((a, b) => b.timestamp.seconds - a.timestamp.seconds); 
-        // This will replace the loading indicator
         DOMElements.historyListEl.innerHTML = allHistories.length === 0 ? '<tr><td colspan="5" class="text-center py-10 text-slate-400">Belum ada riwayat.</td></tr>' : allHistories.map(entry => { const date = new Date(entry.timestamp.seconds * 1000).toLocaleString('id-ID'); const isAddition = entry.type.includes('penambahan'); return `<tr><td class="px-6 py-4 text-sm text-slate-400">${date}</td><td class="px-6 py-4 text-sm font-medium text-white">${entry.productName}</td><td class="px-6 py-4 text-sm font-semibold ${isAddition ? 'text-green-500' : 'text-red-500'}">${entry.type}</td><td class="px-6 py-4 text-sm font-semibold ${isAddition ? 'text-green-500' : 'text-red-500'}">${isAddition ? '+' : '-'}${entry.amount}</td><td class="px-6 py-4 text-sm text-white font-medium" title="ID: ${entry.userId}">${entry.userName || 'Tanpa Nama'}</td></tr>`; }).join('');
         isInitialHistoryLoad = false;
     });
 }
 
-function exportToCsv(filename, rows) { if (rows.length === 0) return UI.showToast("Tidak ada data untuk diekspor.", "error"); const headers = Object.keys(rows[0]); const csvContent = [ headers.join(','), ...rows.map(row => headers.map(header => { let cell = row[header] === null || row[header] === undefined ? '' : row[header]; if (typeof cell === 'object' && cell.seconds) { cell = new Date(cell.seconds * 1000).toLocaleString('id-ID'); } const cellString = String(cell); return `"${cellString.replace(/"/g, '""')}"`; }).join(',')) ].join('\n'); const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }); const link = document.createElement("a"); if (link.download !== undefined) { const url = URL.createObjectURL(blob); link.setAttribute("href", url); link.setAttribute("download", filename); link.style.visibility = 'hidden'; document.body.appendChild(link); link.click(); document.body.removeChild(link); } }
+// --- FUNGSI BARU UNTUK EKSPOR XLSX ---
+function exportToXlsx(filename, rows) {
+    if (rows.length === 0) {
+        return UI.showToast("Tidak ada data untuk diekspor.", "error");
+    }
+    
+    // Ganti nama properti timestamp menjadi 'Waktu' agar lebih mudah dibaca di Excel
+    const dataToExport = rows.map(row => {
+      const newRow = { ...row };
+      if (newRow.timestamp && newRow.timestamp.seconds) {
+        newRow.Waktu = new Date(newRow.timestamp.seconds * 1000).toLocaleString('id-ID');
+        delete newRow.timestamp;
+      }
+      return newRow;
+    });
+    
+    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Data");
+    
+    XLSX.writeFile(workbook, filename);
+}
+// --- AKHIR FUNGSI BARU ---
 
 // --- Event Listeners ---
 DOMElements.searchInput.addEventListener('input', UI.renderProducts);
 DOMElements.categoryFilter.addEventListener('change', UI.renderProducts);
 DOMElements.clearFormBtn.addEventListener('click', UI.resetForm);
 DOMElements.cancelEdit.addEventListener('click', () => UI.closeModal(DOMElements.editProductModal));
-DOMElements.exportProductsBtn.addEventListener('click', () => exportToCsv(`produk_stok_${new Date().toISOString().slice(0,10)}.csv`, allProducts.map(({id, createdAt, ...rest}) => rest)));
-DOMElements.exportHistoryBtn.addEventListener('click', () => exportToCsv(`riwayat_stok_${new Date().toISOString().slice(0,10)}.csv`, allHistories.map(({userId, ...rest}) => rest)));
+DOMElements.exportProductsBtn.addEventListener('click', () => exportToXlsx(`produk_stok_${new Date().toISOString().slice(0,10)}.xlsx`, allProducts.map(({id, createdAt, ...rest}) => rest)));
+DOMElements.exportHistoryBtn.addEventListener('click', () => exportToXlsx(`riwayat_stok_${new Date().toISOString().slice(0,10)}.xlsx`, allHistories.map(({userId, ...rest}) => rest)));
 DOMElements.categorySelect.addEventListener('change', (e) => { DOMElements.newCategoryInput.classList.toggle('hidden', e.target.value !== '--new--'); });
 DOMElements.nameForm.addEventListener('submit', (e) => { e.preventDefault(); const name = DOMElements.userNameInput.value.trim(); if (name) { userName = name; localStorage.setItem('inventoryUserName', userName); DOMElements.userNameDisplay.textContent = userName; UI.closeModal(DOMElements.nameModal); } });
 DOMElements.productListEl.addEventListener('click', (e) => { const btn = e.target.closest('button'); if (!btn) return; const id = btn.dataset.id; const product = allProducts.find(p => p.id === id); if (btn.classList.contains('edit-btn')) { if (product) UI.showEditModal(product); } else if (btn.classList.contains('delete-btn')) { UI.showDeleteConfirm(btn.dataset.name, async (ok) => { if (ok) { try { await deleteDoc(doc(db, `artifacts/${appId}/public/data/products`, id)); UI.showToast(`Produk "${btn.dataset.name}" dihapus.`, 'success'); } catch (err) { UI.showToast("Gagal hapus produk.", "error"); } } }); } });
@@ -163,7 +182,6 @@ DOMElements.productForm.addEventListener('submit', async (e) => {
     const amount = parseFloat(DOMElements.productForm.changeAmount.value);
     const minStock = parseFloat(DOMElements.productForm.minStock.value);
 
-    // Fitur 3: Validasi Input
     if (!productName || !category) {
         return UI.showToast("Nama produk dan kategori harus diisi.", "error");
     }
@@ -176,7 +194,6 @@ DOMElements.productForm.addEventListener('submit', async (e) => {
 
     const normalizedProductName = productName.toLowerCase().replace(/\s+/g, ' ').trim();
 
-    // Fitur 2: Nonaktifkan Tombol
     const addBtn = document.querySelector('button[data-action="add"]');
     const subtractBtn = document.querySelector('button[data-action="subtract"]');
     const originalAddText = addBtn.innerHTML;
@@ -229,7 +246,6 @@ DOMElements.productForm.addEventListener('submit', async (e) => {
         console.error("Transaction failed: ", error);
         UI.showToast(typeof error === 'string' ? error : "Gagal memproses transaksi.", "error");
     } finally {
-        // Fitur 2: Aktifkan kembali tombol
         addBtn.disabled = false;
         subtractBtn.disabled = false;
         addBtn.innerHTML = originalAddText;
