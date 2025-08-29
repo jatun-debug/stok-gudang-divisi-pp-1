@@ -35,7 +35,15 @@ const DOMElements = {
     exportHistoryBtn: document.getElementById('exportHistoryBtn'),
     productNameInput: document.getElementById('productName'),
     productSuggestions: document.getElementById('productSuggestions'),
-    historyDateFilter: document.getElementById('historyDateFilter')
+    historyDateFilter: document.getElementById('historyDateFilter'),
+    // --- Elemen-elemen baru untuk modal pengurangan stok
+    subtractModal: document.getElementById('subtractModal'),
+    subtractForm: document.getElementById('subtractForm'),
+    subtractProductName: document.getElementById('subtractProductName'),
+    subtractReason: document.getElementById('subtractReason'),
+    cancelSubtract: document.getElementById('cancelSubtract'),
+    subtractProductIdInput: document.getElementById('subtractProductId'),
+    subtractProductAmountInput: document.getElementById('subtractProductAmount')
 };
 
 const UI = {
@@ -128,10 +136,11 @@ const UI = {
             return formattedEntryDate === selectedDate;
         }) : allHistories;
 
-        DOMElements.historyListEl.innerHTML = filteredHistories.length === 0 ? '<tr><td colspan="5" class="text-center py-10 text-slate-400">Belum ada riwayat.</td></tr>' : filteredHistories.map(entry => { 
+        DOMElements.historyListEl.innerHTML = filteredHistories.length === 0 ? '<tr><td colspan="6" class="text-center py-10 text-slate-400">Belum ada riwayat.</td></tr>' : filteredHistories.map(entry => { 
             const date = new Date(entry.timestamp.seconds * 1000).toLocaleString('id-ID'); 
             const isAddition = entry.type.includes('penambahan'); 
-            return `<tr><td class="px-6 py-4 text-sm text-slate-400">${date}</td><td class="px-6 py-4 text-sm font-medium text-white">${entry.productName}</td><td class="px-6 py-4 text-sm font-semibold ${isAddition ? 'text-green-500' : 'text-red-500'}">${entry.type}</td><td class="px-6 py-4 text-sm font-semibold ${isAddition ? 'text-green-500' : 'text-red-500'}">${isAddition ? '+' : '-'}${entry.amount}</td><td class="px-6 py-4 text-sm text-white font-medium" title="ID: ${entry.userId}">${entry.userName || 'Tanpa Nama'}</td></tr>`; 
+            const reasonDisplay = entry.reason ? `<td>${entry.reason}</td>` : `<td>-</td>`;
+            return `<tr><td class="px-6 py-4 text-sm text-slate-400">${date}</td><td class="px-6 py-4 text-sm font-medium text-white">${entry.productName}</td><td class="px-6 py-4 text-sm font-semibold ${isAddition ? 'text-green-500' : 'text-red-500'}">${entry.type}</td><td class="px-6 py-4 text-sm font-semibold ${isAddition ? 'text-green-500' : 'text-red-500'}">${isAddition ? '+' : '-'}${entry.amount}</td><td class="px-6 py-4 text-sm text-white font-medium" title="ID: ${entry.userId}">${entry.userName || 'Tanpa Nama'}</td><td class="px-6 py-4 text-sm text-slate-400">${entry.reason || '-'}</td></tr>`; 
         }).join('');
     },
     resetForm() { DOMElements.productForm.reset(); DOMElements.newCategoryInput.classList.add('hidden'); }
@@ -144,7 +153,7 @@ const historyCollection = collection(db, `artifacts/${appId}/public/data/history
 
 function listenToData() {
     const loadingRowProducts = '<tr><td colspan="4" class="text-center py-10 text-slate-400"><span class="animate-pulse">Memuat data produk...</span></td></tr>';
-    const loadingRowHistory = '<tr><td colspan="5" class="text-center py-10 text-slate-400"><span class="animate-pulse">Memuat riwayat...</span></td></tr>';
+    const loadingRowHistory = '<tr><td colspan="6" class="text-center py-10 text-slate-400"><span class="animate-pulse">Memuat riwayat...</span></td></tr>';
     DOMElements.productListEl.innerHTML = loadingRowProducts;
     DOMElements.historyListEl.innerHTML = loadingRowHistory;
 
@@ -189,6 +198,7 @@ function exportToXlsx(filename, rows) {
     XLSX.writeFile(workbook, filename);
 }
 
+// --- Event Listeners ---
 DOMElements.searchInput.addEventListener('input', UI.renderProducts);
 DOMElements.categoryFilter.addEventListener('change', UI.renderProducts);
 DOMElements.clearFormBtn.addEventListener('click', UI.resetForm);
@@ -196,7 +206,7 @@ DOMElements.cancelEdit.addEventListener('click', () => UI.closeModal(DOMElements
 DOMElements.exportProductsBtn.addEventListener('click', () => exportToXlsx(`produk_stok_${new Date().toISOString().slice(0,10)}.xlsx`, allProducts.map(({id, createdAt, ...rest}) => rest)));
 DOMElements.exportHistoryBtn.addEventListener('click', () => exportToXlsx(`riwayat_stok_${new Date().toISOString().slice(0,10)}.xlsx`, allHistories.map(({userId, ...rest}) => rest)));
 DOMElements.categorySelect.addEventListener('change', (e) => { DOMElements.newCategoryInput.classList.toggle('hidden', e.target.value !== '--new--'); });
-DOMElements.nameForm.addEventListener('submit', (e) => { e.preventDefault(); const name = DOMElements.userNameInput.value.trim(); if (name) { userName = name; localStorage.setItem('inventoryUserName', userName); DOMElements.userNameDisplay.textContent = userName; UI.closeModal(DOMElements.nameModal); } });
+DOMElements.nameForm.addEventListener('submit', (e) => { e.preventDefault(); const name = DOMElements.userNameInput.value.trim(); if (name) { userName = name; localStorage.setItem('inventoryUserName', userName); DOMElements.userNameDisplay.textContent = name; UI.closeModal(DOMElements.nameModal); } });
 DOMElements.productListEl.addEventListener('click', (e) => { const btn = e.target.closest('button'); if (!btn) return; const id = btn.dataset.id; const product = allProducts.find(p => p.id === id); if (btn.classList.contains('edit-btn')) { if (product) UI.showEditModal(product); } else if (btn.classList.contains('delete-btn')) { UI.showDeleteConfirm(btn.dataset.name, async (ok) => { if (ok) { try { await deleteDoc(doc(db, `artifacts/${appId}/public/data/products`, id)); UI.showToast(`Produk "${btn.dataset.name}" dihapus.`, 'success'); } catch (err) { UI.showToast("Gagal hapus produk.", "error"); } } }); } });
 DOMElements.editProductForm.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -228,6 +238,7 @@ DOMElements.editProductForm.addEventListener('submit', async (e) => {
     }
 });
 
+// Modifikasi form utama: hanya menangani "Tambah Stok"
 DOMElements.productForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!userId || !userName) return UI.showToast("Harap masukkan nama Anda.", "error");
@@ -249,18 +260,39 @@ DOMElements.productForm.addEventListener('submit', async (e) => {
     if (isNaN(minStock) || minStock < 0) {
         return UI.showToast("Stok minimum harus berupa angka 0 atau lebih.", "error");
     }
+    
+    // Jika tombol "Kurangi Stok" yang diklik, tampilkan modal
+    if (action === 'subtract') {
+        const normalizedProductName = productName.toLowerCase().replace(/\s+/g, ' ').trim();
+        const productQuery = query(collection(db, `artifacts/${appId}/public/data/products`), where("normalizedName", "==", normalizedProductName));
+        const snapshot = await getDocs(productQuery);
+        const existingDoc = snapshot.docs[0];
 
+        if (!existingDoc) {
+            UI.showToast("Tidak bisa mengurangi stok produk yang belum ada.", "error");
+            return;
+        }
+
+        const productData = existingDoc.data();
+        if (productData.stock < amount) {
+            UI.showToast(`Stok tidak mencukupi: ${productData.stock}.`, "error");
+            return;
+        }
+
+        DOMElements.subtractProductIdInput.value = existingDoc.id;
+        DOMElements.subtractProductAmountInput.value = amount;
+        DOMElements.subtractProductName.textContent = `Produk: ${productData.name}`;
+        UI.showModal(DOMElements.subtractModal);
+        return;
+    }
+
+    // Logika untuk "Tambah Stok"
     const normalizedProductName = productName.toLowerCase().replace(/\s+/g, ' ').trim();
-
     const addBtn = document.querySelector('button[data-action="add"]');
-    const subtractBtn = document.querySelector('button[data-action="subtract"]');
     const originalAddText = addBtn.innerHTML;
-    const originalSubtractText = subtractBtn.innerHTML;
 
     addBtn.disabled = true;
-    subtractBtn.disabled = true;
     addBtn.innerHTML = '<span class="animate-pulse">Menyimpan...</span>';
-    subtractBtn.innerHTML = '<span class="animate-pulse">Menyimpan...</span>';
 
     try {
         const productQuery = query(collection(db, `artifacts/${appId}/public/data/products`), where("normalizedName", "==", normalizedProductName));
@@ -268,21 +300,12 @@ DOMElements.productForm.addEventListener('submit', async (e) => {
         const existingDoc = snapshot.docs[0];
 
         await runTransaction(db, async (transaction) => {
-            let historyType = '';
-            
+            let historyType = 'penambahan';
             if (existingDoc) {
                 const productRef = existingDoc.ref;
                 const productData = (await transaction.get(productRef)).data();
-                if (action === 'add') {
-                    transaction.update(productRef, { stock: productData.stock + amount });
-                    historyType = 'penambahan';
-                } else {
-                    if (productData.stock < amount) throw `Stok tidak mencukupi: ${productData.stock}.`;
-                    transaction.update(productRef, { stock: productData.stock - amount });
-                    historyType = 'pengurangan';
-                }
+                transaction.update(productRef, { stock: productData.stock + amount });
             } else {
-                if (action === 'subtract') throw "Tidak bisa mengurangi stok produk baru.";
                 const newProductRef = doc(collection(db, `artifacts/${appId}/public/data/products`));
                 transaction.set(newProductRef, {
                     name: productName,
@@ -305,10 +328,57 @@ DOMElements.productForm.addEventListener('submit', async (e) => {
         UI.showToast(typeof error === 'string' ? error : "Gagal memproses transaksi.", "error");
     } finally {
         addBtn.disabled = false;
-        subtractBtn.disabled = false;
         addBtn.innerHTML = originalAddText;
-        subtractBtn.innerHTML = originalSubtractText;
     }
+});
+
+// Listener untuk form modal pengurangan stok
+DOMElements.subtractForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const id = DOMElements.subtractProductIdInput.value;
+    const amount = parseFloat(DOMElements.subtractProductAmountInput.value);
+    const reason = DOMElements.subtractReason.value.trim();
+    const productData = allProducts.find(p => p.id === id);
+
+    if (!reason) {
+        return UI.showToast("Alasan harus diisi.", "error");
+    }
+
+    const confirmBtn = document.querySelector('#subtractForm button[type="submit"]');
+    const originalText = confirmBtn.innerHTML;
+    confirmBtn.disabled = true;
+    confirmBtn.innerHTML = '<span class="animate-pulse">Menyimpan...</span>';
+
+    try {
+        await runTransaction(db, async (transaction) => {
+            const productRef = doc(db, `artifacts/${appId}/public/data/products`, id);
+            transaction.update(productRef, { stock: productData.stock - amount });
+            const newHistoryRef = doc(collection(db, `artifacts/${appId}/public/data/history`));
+            transaction.set(newHistoryRef, { 
+                productName: productData.name, 
+                type: 'pengurangan', 
+                amount: amount, 
+                userId: userId, 
+                userName: userName, 
+                timestamp: serverTimestamp(), 
+                reason: reason 
+            });
+        });
+        UI.showToast(`Stok untuk "${productData.name}" berhasil dikurangi.`, "success");
+        UI.closeModal(DOMElements.subtractModal);
+        UI.resetForm();
+    } catch (error) {
+        console.error("Transaction failed: ", error);
+        UI.showToast(typeof error === 'string' ? error : "Gagal memproses transaksi.", "error");
+    } finally {
+        confirmBtn.disabled = false;
+        confirmBtn.innerHTML = originalText;
+    }
+});
+
+// Listener untuk tombol batal di modal pengurangan stok
+DOMElements.cancelSubtract.addEventListener('click', () => {
+    UI.closeModal(DOMElements.subtractModal);
 });
 
 DOMElements.productNameInput.addEventListener('input', (e) => {
