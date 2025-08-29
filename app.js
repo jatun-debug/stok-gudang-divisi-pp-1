@@ -35,7 +35,6 @@ const DOMElements = {
     exportHistoryBtn: document.getElementById('exportHistoryBtn'),
     productNameInput: document.getElementById('productName'),
     productSuggestions: document.getElementById('productSuggestions'),
-    // --- Elemen baru untuk filter tanggal
     historyDateFilter: document.getElementById('historyDateFilter')
 };
 
@@ -69,7 +68,6 @@ const UI = {
         }).join('');
     },
     updateCategoryDropdowns(element, selectedValue) {
-        // --- Logika baru untuk menghitung jumlah produk per kategori
         const categoryCounts = allProducts.reduce((acc, p) => {
             acc[p.category] = (acc[p.category] || 0) + 1;
             return acc;
@@ -122,12 +120,12 @@ const UI = {
     hideSuggestions() {
         DOMElements.productSuggestions.classList.add('hidden');
     },
-    // --- Fungsi baru untuk merender riwayat berdasarkan tanggal
     renderHistory() {
         const selectedDate = DOMElements.historyDateFilter.value;
         const filteredHistories = selectedDate ? allHistories.filter(entry => {
-            const entryDate = new Date(entry.timestamp.seconds * 1000).toISOString().slice(0, 10);
-            return entryDate === selectedDate;
+            const entryDate = new Date(entry.timestamp.seconds * 1000);
+            const formattedEntryDate = `${entryDate.getFullYear()}-${String(entryDate.getMonth() + 1).padStart(2, '0')}-${String(entryDate.getDate()).padStart(2, '0')}`;
+            return formattedEntryDate === selectedDate;
         }) : allHistories;
 
         DOMElements.historyListEl.innerHTML = filteredHistories.length === 0 ? '<tr><td colspan="5" class="text-center py-10 text-slate-400">Belum ada riwayat.</td></tr>' : filteredHistories.map(entry => { 
@@ -191,7 +189,6 @@ function exportToXlsx(filename, rows) {
     XLSX.writeFile(workbook, filename);
 }
 
-// --- Event Listeners ---
 DOMElements.searchInput.addEventListener('input', UI.renderProducts);
 DOMElements.categoryFilter.addEventListener('change', UI.renderProducts);
 DOMElements.clearFormBtn.addEventListener('click', UI.resetForm);
@@ -314,7 +311,6 @@ DOMElements.productForm.addEventListener('submit', async (e) => {
     }
 });
 
-// --- Event listeners baru untuk saran produk dan filter tanggal
 DOMElements.productNameInput.addEventListener('input', (e) => {
     UI.renderProductSuggestions(e.target.value);
 });
