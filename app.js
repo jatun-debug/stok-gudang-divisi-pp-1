@@ -33,9 +33,10 @@ const DOMElements = {
     cancelEdit: document.getElementById('cancelEdit'),
     exportProductsBtn: document.getElementById('exportProductsBtn'),
     exportHistoryBtn: document.getElementById('exportHistoryBtn'),
-    // --- Elemen baru untuk saran produk
     productNameInput: document.getElementById('productName'),
-    productSuggestions: document.getElementById('productSuggestions')
+    productSuggestions: document.getElementById('productSuggestions'),
+    // --- Elemen baru untuk filter tanggal
+    historyDateFilter: document.getElementById('historyDateFilter')
 };
 
 const UI = {
@@ -68,11 +69,25 @@ const UI = {
         }).join('');
     },
     updateCategoryDropdowns(element, selectedValue) {
+        // --- Logika baru untuk menghitung jumlah produk per kategori
+        const categoryCounts = allProducts.reduce((acc, p) => {
+            acc[p.category] = (acc[p.category] || 0) + 1;
+            return acc;
+        }, {});
         const categories = [...new Set(allProducts.map(p => p.category))].sort();
-        if (element) { element.innerHTML = ''; categories.forEach(cat => element.innerHTML += `<option value="${cat}">${cat}</option>`); if (selectedValue) element.value = selectedValue; } 
-        else { this.updateCategoryDropdowns(DOMElements.categoryFilter, DOMElements.categoryFilter.value); DOMElements.categoryFilter.insertAdjacentHTML('afterbegin', '<option value="all">Semua Kategori</option>'); this.updateCategoryDropdowns(DOMElements.categorySelect, DOMElements.categorySelect.value); DOMElements.categorySelect.insertAdjacentHTML('beforeend', '<option value="">Pilih Kategori</option><option value="--new--">-- Tambah Baru --</option>'); }
+
+        if (element) { 
+            element.innerHTML = ''; 
+            categories.forEach(cat => element.innerHTML += `<option value="${cat}">${cat} (${categoryCounts[cat]})</option>`); 
+            if (selectedValue) element.value = selectedValue; 
+        } 
+        else { 
+            this.updateCategoryDropdowns(DOMElements.categoryFilter, DOMElements.categoryFilter.value); 
+            DOMElements.categoryFilter.insertAdjacentHTML('afterbegin', `<option value="all">Semua Kategori (${allProducts.length})</option>`); 
+            this.updateCategoryDropdowns(DOMElements.categorySelect, DOMElements.categorySelect.value); 
+            DOMElements.categorySelect.insertAdjacentHTML('beforeend', '<option value="">Pilih Kategori</option><option value="--new--">-- Tambah Baru --</option>'); 
+        }
     },
-    // --- Fungsi baru untuk merender saran produk
     renderProductSuggestions(searchTerm) {
         const normalizedSearchTerm = searchTerm.toLowerCase().trim();
         const productNames = [...new Set(allProducts.map(p => p.name))].sort();
@@ -94,7 +109,6 @@ const UI = {
                 `;
                 DOMElements.productSuggestions.appendChild(suggestionEl);
                 
-                // Tambahkan event listener untuk memilih produk
                 suggestionEl.querySelector('.suggestion-text').addEventListener('click', (e) => {
                     DOMElements.productNameInput.value = name;
                     UI.hideSuggestions();
@@ -105,9 +119,22 @@ const UI = {
             UI.hideSuggestions();
         }
     },
-    // --- Fungsi baru untuk menyembunyikan saran
     hideSuggestions() {
         DOMElements.productSuggestions.classList.add('hidden');
+    },
+    // --- Fungsi baru untuk merender riwayat berdasarkan tanggal
+    renderHistory() {
+        const selectedDate = DOMElements.historyDateFilter.value;
+        const filteredHistories = selectedDate ? allHistories.filter(entry => {
+            const entryDate = new Date(entry.timestamp.seconds * 1000).toISOString().slice(0, 10);
+            return entryDate === selectedDate;
+        }) : allHistories;
+
+        DOMElements.historyListEl.innerHTML = filteredHistories.length === 0 ? '<tr><td colspan="5" class="text-center py-10 text-slate-400">Belum ada riwayat.</td></tr>' : filteredHistories.map(entry => { 
+            const date = new Date(entry.timestamp.seconds * 1000).toLocaleString('id-ID'); 
+            const isAddition = entry.type.includes('penambahan'); 
+            return `<tr><td class="px-6 py-4 text-sm text-slate-400">${date}</td><td class="px-6 py-4 text-sm font-medium text-white">${entry.productName}</td><td class="px-6 py-4 text-sm font-semibold ${isAddition ? 'text-green-500' : 'text-red-500'}">${entry.type}</td><td class="px-6 py-4 text-sm font-semibold ${isAddition ? 'text-green-500' : 'text-red-500'}">${isAddition ? '+' : '-'}${entry.amount}</td><td class="px-6 py-4 text-sm text-white font-medium" title="ID: ${entry.userId}">${entry.userName || 'Tanpa Nama'}</td></tr>`; 
+        }).join('');
     },
     resetForm() { DOMElements.productForm.reset(); DOMElements.newCategoryInput.classList.add('hidden'); }
 };
@@ -141,7 +168,7 @@ function listenToData() {
             });
         }
         allHistories = snapshot.docs.map(doc => doc.data()).sort((a, b) => b.timestamp.seconds - a.timestamp.seconds); 
-        DOMElements.historyListEl.innerHTML = allHistories.length === 0 ? '<tr><td colspan="5" class="text-center py-10 text-slate-400">Belum ada riwayat.</td></tr>' : allHistories.map(entry => { const date = new Date(entry.timestamp.seconds * 1000).toLocaleString('id-ID'); const isAddition = entry.type.includes('penambahan'); return `<tr><td class="px-6 py-4 text-sm text-slate-400">${date}</td><td class="px-6 py-4 text-sm font-medium text-white">${entry.productName}</td><td class="px-6 py-4 text-sm font-semibold ${isAddition ? 'text-green-500' : 'text-red-500'}">${entry.type}</td><td class="px-6 py-4 text-sm font-semibold ${isAddition ? 'text-green-500' : 'text-red-500'}">${isAddition ? '+' : '-'}${entry.amount}</td><td class="px-6 py-4 text-sm text-white font-medium" title="ID: ${entry.userId}">${entry.userName || 'Tanpa Nama'}</td></tr>`; }).join('');
+        UI.renderHistory();
         isInitialHistoryLoad = false;
     });
 }
@@ -287,7 +314,7 @@ DOMElements.productForm.addEventListener('submit', async (e) => {
     }
 });
 
-// --- Event listeners baru untuk saran produk
+// --- Event listeners baru untuk saran produk dan filter tanggal
 DOMElements.productNameInput.addEventListener('input', (e) => {
     UI.renderProductSuggestions(e.target.value);
 });
@@ -312,12 +339,13 @@ DOMElements.productSuggestions.addEventListener('click', (e) => {
     }
 });
 
-// Sembunyikan saran jika klik di luar
 document.addEventListener('click', (e) => {
     if (!DOMElements.productForm.contains(e.target)) {
         UI.hideSuggestions();
     }
 });
+
+DOMElements.historyDateFilter.addEventListener('change', UI.renderHistory);
 
 onAuthStateChanged(auth, async (user) => {
     if (user) {
