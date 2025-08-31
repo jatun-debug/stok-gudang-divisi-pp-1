@@ -36,7 +36,6 @@ const DOMElements = {
     productNameInput: document.getElementById('productName'),
     productSuggestions: document.getElementById('productSuggestions'),
     historyDateFilter: document.getElementById('historyDateFilter'),
-    // --- Elemen-elemen baru untuk modal pengurangan stok
     subtractModal: document.getElementById('subtractModal'),
     subtractForm: document.getElementById('subtractForm'),
     subtractProductName: document.getElementById('subtractProductName'),
@@ -198,7 +197,48 @@ function exportToXlsx(filename, rows) {
     XLSX.writeFile(workbook, filename);
 }
 
-// --- Event Listeners ---
+const buttons = {
+    add: document.querySelector('button[data-action="add"]'),
+    subtract: document.querySelector('button[data-action="subtract"]'),
+    confirm: document.querySelector('#subtractForm button[type="submit"]')
+};
+
+const originalText = {
+    add: buttons.add.innerHTML,
+    subtract: buttons.subtract.innerHTML,
+    confirm: buttons.confirm.innerHTML
+};
+
+function setLoadingState(button, isLoading, type) {
+    const isAdding = type === 'add';
+    const originalBtn = isAdding ? buttons.add : buttons.subtract;
+    const originalTextBtn = isAdding ? originalText.add : originalText.subtract;
+    const otherBtn = isAdding ? buttons.subtract : buttons.add;
+
+    if (isLoading) {
+        button.disabled = true;
+        originalBtn.innerHTML = '<span class="animate-pulse">Menyimpan...</span>';
+        originalBtn.classList.add('bg-slate-700', 'text-slate-300', 'hover:bg-slate-600');
+        if (isAdding) {
+            originalBtn.classList.remove('bg-green-500', 'hover:bg-green-600');
+        } else {
+            otherBtn.classList.remove('bg-green-500', 'hover:bg-green-600');
+        }
+        
+    } else {
+        originalBtn.disabled = false;
+        originalBtn.innerHTML = originalTextBtn;
+        if (isAdding) {
+            originalBtn.classList.remove('bg-slate-700', 'text-slate-300', 'hover:bg-slate-600');
+            originalBtn.classList.add('bg-green-500', 'hover:bg-green-600');
+        } else {
+            originalBtn.classList.remove('bg-slate-700', 'text-slate-300', 'hover:bg-slate-600');
+            originalBtn.classList.add('bg-red-500', 'hover:bg-red-600');
+        }
+    }
+}
+
+
 DOMElements.searchInput.addEventListener('input', UI.renderProducts);
 DOMElements.categoryFilter.addEventListener('change', UI.renderProducts);
 DOMElements.clearFormBtn.addEventListener('click', UI.resetForm);
@@ -238,7 +278,6 @@ DOMElements.editProductForm.addEventListener('submit', async (e) => {
     }
 });
 
-// Modifikasi form utama: hanya menangani "Tambah Stok"
 DOMElements.productForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!userId || !userName) return UI.showToast("Harap masukkan nama Anda.", "error");
@@ -261,7 +300,6 @@ DOMElements.productForm.addEventListener('submit', async (e) => {
         return UI.showToast("Stok minimum harus berupa angka 0 atau lebih.", "error");
     }
     
-    // Jika tombol "Kurangi Stok" yang diklik, tampilkan modal
     if (action === 'subtract') {
         const normalizedProductName = productName.toLowerCase().replace(/\s+/g, ' ').trim();
         const productQuery = query(collection(db, `artifacts/${appId}/public/data/products`), where("normalizedName", "==", normalizedProductName));
@@ -286,16 +324,10 @@ DOMElements.productForm.addEventListener('submit', async (e) => {
         return;
     }
 
-    // Logika untuk "Tambah Stok"
-    const normalizedProductName = productName.toLowerCase().replace(/\s+/g, ' ').trim();
-    const addBtn = document.querySelector('button[data-action="add"]');
-    const originalAddText = addBtn.innerHTML;
-
-    addBtn.disabled = true;
-    addBtn.innerHTML = '<span class="animate-pulse">Menyimpan...</span>';
+    setLoadingState(buttons.add, true, 'add');
 
     try {
-        const productQuery = query(collection(db, `artifacts/${appId}/public/data/products`), where("normalizedName", "==", normalizedProductName));
+        const productQuery = query(collection(db, `artifacts/${appId}/public/data/products`), where("normalizedName", "==", productName.toLowerCase().replace(/\s+/g, ' ').trim()));
         const snapshot = await getDocs(productQuery);
         const existingDoc = snapshot.docs[0];
 
@@ -309,7 +341,7 @@ DOMElements.productForm.addEventListener('submit', async (e) => {
                 const newProductRef = doc(collection(db, `artifacts/${appId}/public/data/products`));
                 transaction.set(newProductRef, {
                     name: productName,
-                    normalizedName: normalizedProductName,
+                    normalizedName: productName.toLowerCase().replace(/\s+/g, ' ').trim(),
                     category,
                     stock: amount,
                     minStock,
@@ -327,12 +359,10 @@ DOMElements.productForm.addEventListener('submit', async (e) => {
         console.error("Transaction failed: ", error);
         UI.showToast(typeof error === 'string' ? error : "Gagal memproses transaksi.", "error");
     } finally {
-        addBtn.disabled = false;
-        addBtn.innerHTML = originalAddText;
+        setLoadingState(buttons.add, false, 'add');
     }
 });
 
-// Listener untuk form modal pengurangan stok
 DOMElements.subtractForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const id = DOMElements.subtractProductIdInput.value;
@@ -344,10 +374,7 @@ DOMElements.subtractForm.addEventListener('submit', async (e) => {
         return UI.showToast("Alasan harus diisi.", "error");
     }
 
-    const confirmBtn = document.querySelector('#subtractForm button[type="submit"]');
-    const originalText = confirmBtn.innerHTML;
-    confirmBtn.disabled = true;
-    confirmBtn.innerHTML = '<span class="animate-pulse">Menyimpan...</span>';
+    setLoadingState(buttons.subtract, true, 'subtract');
 
     try {
         await runTransaction(db, async (transaction) => {
@@ -371,12 +398,10 @@ DOMElements.subtractForm.addEventListener('submit', async (e) => {
         console.error("Transaction failed: ", error);
         UI.showToast(typeof error === 'string' ? error : "Gagal memproses transaksi.", "error");
     } finally {
-        confirmBtn.disabled = false;
-        confirmBtn.innerHTML = originalText;
+        setLoadingState(buttons.subtract, false, 'subtract');
     }
 });
 
-// Listener untuk tombol batal di modal pengurangan stok
 DOMElements.cancelSubtract.addEventListener('click', () => {
     UI.closeModal(DOMElements.subtractModal);
 });
