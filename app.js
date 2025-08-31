@@ -9,6 +9,7 @@ const db = getFirestore(app);
 const auth = getAuth(app);
 
 let userId = null, userName = null, allProducts = [], allHistories = [], isInitialHistoryLoad = true;
+let selectedSuggestionIndex = -1; // --- Variabel baru untuk melacak pilihan keyboard
 
 const DOMElements = {
     productForm: document.getElementById('productForm'),
@@ -99,6 +100,7 @@ const UI = {
         const filteredNames = productNames.filter(name => name.toLowerCase().includes(normalizedSearchTerm));
         
         DOMElements.productSuggestions.innerHTML = '';
+        selectedSuggestionIndex = -1; // Reset index saat daftar saran diperbarui
         
         if (filteredNames.length > 0 && normalizedSearchTerm.length > 0) {
             filteredNames.forEach(name => {
@@ -409,6 +411,48 @@ DOMElements.cancelSubtract.addEventListener('click', () => {
 DOMElements.productNameInput.addEventListener('input', (e) => {
     UI.renderProductSuggestions(e.target.value);
 });
+
+// --- Event listener baru untuk keyboard
+DOMElements.productNameInput.addEventListener('keydown', (e) => {
+    const suggestions = DOMElements.productSuggestions.querySelectorAll('div');
+    if (suggestions.length === 0) return;
+
+    if (e.key === 'ArrowDown') {
+        e.preventDefault(); // Mencegah kursor bergerak
+        if (selectedSuggestionIndex < suggestions.length - 1) {
+            selectedSuggestionIndex++;
+        } else {
+            selectedSuggestionIndex = 0; // Kembali ke awal
+        }
+        updateSelectionHighlight(suggestions);
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault(); // Mencegah kursor bergerak
+        if (selectedSuggestionIndex > 0) {
+            selectedSuggestionIndex--;
+        } else {
+            selectedSuggestionIndex = suggestions.length - 1; // Kembali ke akhir
+        }
+        updateSelectionHighlight(suggestions);
+    } else if (e.key === 'Enter' && selectedSuggestionIndex !== -1) {
+        e.preventDefault(); // Mencegah form disubmit
+        const selectedText = suggestions[selectedSuggestionIndex].querySelector('.suggestion-text').textContent;
+        DOMElements.productNameInput.value = selectedText;
+        UI.hideSuggestions();
+    }
+});
+
+function updateSelectionHighlight(suggestions) {
+    suggestions.forEach((el, index) => {
+        if (index === selectedSuggestionIndex) {
+            el.classList.add('bg-slate-600');
+            el.classList.remove('hover:bg-slate-600');
+        } else {
+            el.classList.remove('bg-slate-600');
+            el.classList.add('hover:bg-slate-600');
+        }
+    });
+}
+// --- Akhir dari event listener baru
 
 DOMElements.productSuggestions.addEventListener('click', (e) => {
     const btn = e.target.closest('.delete-suggestion');
