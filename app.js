@@ -9,7 +9,7 @@ const db = getFirestore(app);
 const auth = getAuth(app);
 
 let userId = null, userName = null, allProducts = [], allHistories = [], isInitialHistoryLoad = true;
-let selectedSuggestionIndex = -1; // --- Variabel baru untuk melacak pilihan keyboard
+let selectedSuggestionIndex = -1; 
 
 const DOMElements = {
     productForm: document.getElementById('productForm'),
@@ -45,6 +45,50 @@ const DOMElements = {
     subtractProductIdInput: document.getElementById('subtractProductId'),
     subtractProductAmountInput: document.getElementById('subtractProductAmount')
 };
+
+const buttons = {
+    add: document.querySelector('button[data-action="add"]'),
+    subtract: document.querySelector('button[data-action="subtract"]'),
+    confirm: document.querySelector('#subtractForm button[type="submit"]')
+};
+
+const originalText = {
+    add: buttons.add.innerHTML,
+    subtract: buttons.subtract.innerHTML,
+    confirm: buttons.confirm.innerHTML
+};
+
+const originalColors = {
+    add: ['bg-green-500', 'hover:bg-green-600'],
+    subtract: ['bg-red-500', 'hover:bg-red-600']
+};
+
+function resetFormButtons() {
+    buttons.add.disabled = false;
+    buttons.add.innerHTML = originalText.add;
+    buttons.add.classList.remove('bg-slate-700', 'text-slate-300', 'hover:bg-slate-600');
+    buttons.add.classList.add(...originalColors.add);
+
+    buttons.subtract.disabled = false;
+    buttons.subtract.innerHTML = originalText.subtract;
+    buttons.subtract.classList.remove('bg-slate-700', 'text-slate-300', 'hover:bg-slate-600');
+    buttons.subtract.classList.add(...originalColors.subtract);
+}
+
+function setLoadingState(button, isLoading) {
+    if (isLoading) {
+        button.disabled = true;
+        button.innerHTML = '<span class="animate-pulse">Menyimpan...</span>';
+        button.classList.add('bg-slate-700', 'text-slate-300', 'hover:bg-slate-600');
+        button.classList.remove(...(button.dataset.action === 'add' ? originalColors.add : originalColors.subtract));
+    } else {
+        button.disabled = false;
+        button.innerHTML = button.dataset.action === 'add' ? originalText.add : originalText.subtract;
+        button.classList.remove('bg-slate-700', 'text-slate-300', 'hover:bg-slate-600');
+        button.classList.add(...(button.dataset.action === 'add' ? originalColors.add : originalColors.subtract));
+    }
+}
+
 
 const UI = {
     showModal(modal) { modal.classList.remove('invisible', 'opacity-0'); modal.querySelector('.modal-content').classList.remove('scale-95', 'opacity-0'); },
@@ -100,7 +144,7 @@ const UI = {
         const filteredNames = productNames.filter(name => name.toLowerCase().includes(normalizedSearchTerm));
         
         DOMElements.productSuggestions.innerHTML = '';
-        selectedSuggestionIndex = -1; // Reset index saat daftar saran diperbarui
+        selectedSuggestionIndex = -1; 
         
         if (filteredNames.length > 0 && normalizedSearchTerm.length > 0) {
             filteredNames.forEach(name => {
@@ -144,7 +188,7 @@ const UI = {
             return `<tr><td class="px-6 py-4 text-sm text-slate-400">${date}</td><td class="px-6 py-4 text-sm font-medium text-white">${entry.productName}</td><td class="px-6 py-4 text-sm font-semibold ${isAddition ? 'text-green-500' : 'text-red-500'}">${entry.type}</td><td class="px-6 py-4 text-sm font-semibold ${isAddition ? 'text-green-500' : 'text-red-500'}">${isAddition ? '+' : '-'}${entry.amount}</td><td class="px-6 py-4 text-sm text-white font-medium" title="ID: ${entry.userId}">${entry.userName || 'Tanpa Nama'}</td><td class="px-6 py-4 text-sm text-slate-400">${entry.reason || '-'}</td></tr>`; 
         }).join('');
     },
-    resetForm() { DOMElements.productForm.reset(); DOMElements.newCategoryInput.classList.add('hidden'); }
+    resetForm() { DOMElements.productForm.reset(); DOMElements.newCategoryInput.classList.add('hidden'); resetFormButtons(); }
 };
 
 function setupUser() { userName = localStorage.getItem('inventoryUserName'); if (userName) { DOMElements.userNameDisplay.textContent = userName; UI.closeModal(DOMElements.nameModal); } else { UI.showModal(DOMElements.nameModal); } }
@@ -198,48 +242,6 @@ function exportToXlsx(filename, rows) {
     XLSX.utils.book_append_sheet(workbook, worksheet, "Data");
     XLSX.writeFile(workbook, filename);
 }
-
-const buttons = {
-    add: document.querySelector('button[data-action="add"]'),
-    subtract: document.querySelector('button[data-action="subtract"]'),
-    confirm: document.querySelector('#subtractForm button[type="submit"]')
-};
-
-const originalText = {
-    add: buttons.add.innerHTML,
-    subtract: buttons.subtract.innerHTML,
-    confirm: buttons.confirm.innerHTML
-};
-
-function setLoadingState(button, isLoading, type) {
-    const isAdding = type === 'add';
-    const originalBtn = isAdding ? buttons.add : buttons.subtract;
-    const originalTextBtn = isAdding ? originalText.add : originalText.subtract;
-    const otherBtn = isAdding ? buttons.subtract : buttons.add;
-
-    if (isLoading) {
-        button.disabled = true;
-        originalBtn.innerHTML = '<span class="animate-pulse">Menyimpan...</span>';
-        originalBtn.classList.add('bg-slate-700', 'text-slate-300', 'hover:bg-slate-600');
-        if (isAdding) {
-            originalBtn.classList.remove('bg-green-500', 'hover:bg-green-600');
-        } else {
-            otherBtn.classList.remove('bg-green-500', 'hover:bg-green-600');
-        }
-        
-    } else {
-        originalBtn.disabled = false;
-        originalBtn.innerHTML = originalTextBtn;
-        if (isAdding) {
-            originalBtn.classList.remove('bg-slate-700', 'text-slate-300', 'hover:bg-slate-600');
-            originalBtn.classList.add('bg-green-500', 'hover:bg-green-600');
-        } else {
-            originalBtn.classList.remove('bg-slate-700', 'text-slate-300', 'hover:bg-slate-600');
-            originalBtn.classList.add('bg-red-500', 'hover:bg-red-600');
-        }
-    }
-}
-
 
 DOMElements.searchInput.addEventListener('input', UI.renderProducts);
 DOMElements.categoryFilter.addEventListener('change', UI.renderProducts);
@@ -326,7 +328,7 @@ DOMElements.productForm.addEventListener('submit', async (e) => {
         return;
     }
 
-    setLoadingState(buttons.add, true, 'add');
+    setLoadingState(buttons.add, true);
 
     try {
         const productQuery = query(collection(db, `artifacts/${appId}/public/data/products`), where("normalizedName", "==", productName.toLowerCase().replace(/\s+/g, ' ').trim()));
@@ -361,7 +363,7 @@ DOMElements.productForm.addEventListener('submit', async (e) => {
         console.error("Transaction failed: ", error);
         UI.showToast(typeof error === 'string' ? error : "Gagal memproses transaksi.", "error");
     } finally {
-        setLoadingState(buttons.add, false, 'add');
+        resetFormButtons();
     }
 });
 
@@ -376,7 +378,7 @@ DOMElements.subtractForm.addEventListener('submit', async (e) => {
         return UI.showToast("Alasan harus diisi.", "error");
     }
 
-    setLoadingState(buttons.subtract, true, 'subtract');
+    setLoadingState(buttons.subtract, true);
 
     try {
         await runTransaction(db, async (transaction) => {
@@ -400,7 +402,7 @@ DOMElements.subtractForm.addEventListener('submit', async (e) => {
         console.error("Transaction failed: ", error);
         UI.showToast(typeof error === 'string' ? error : "Gagal memproses transaksi.", "error");
     } finally {
-        setLoadingState(buttons.subtract, false, 'subtract');
+        resetFormButtons();
     }
 });
 
@@ -412,29 +414,28 @@ DOMElements.productNameInput.addEventListener('input', (e) => {
     UI.renderProductSuggestions(e.target.value);
 });
 
-// --- Event listener baru untuk keyboard
 DOMElements.productNameInput.addEventListener('keydown', (e) => {
     const suggestions = DOMElements.productSuggestions.querySelectorAll('div');
     if (suggestions.length === 0) return;
 
     if (e.key === 'ArrowDown') {
-        e.preventDefault(); // Mencegah kursor bergerak
+        e.preventDefault(); 
         if (selectedSuggestionIndex < suggestions.length - 1) {
             selectedSuggestionIndex++;
         } else {
-            selectedSuggestionIndex = 0; // Kembali ke awal
+            selectedSuggestionIndex = 0; 
         }
         updateSelectionHighlight(suggestions);
     } else if (e.key === 'ArrowUp') {
-        e.preventDefault(); // Mencegah kursor bergerak
+        e.preventDefault(); 
         if (selectedSuggestionIndex > 0) {
             selectedSuggestionIndex--;
         } else {
-            selectedSuggestionIndex = suggestions.length - 1; // Kembali ke akhir
+            selectedSuggestionIndex = suggestions.length - 1; 
         }
         updateSelectionHighlight(suggestions);
     } else if (e.key === 'Enter' && selectedSuggestionIndex !== -1) {
-        e.preventDefault(); // Mencegah form disubmit
+        e.preventDefault(); 
         const selectedText = suggestions[selectedSuggestionIndex].querySelector('.suggestion-text').textContent;
         DOMElements.productNameInput.value = selectedText;
         UI.hideSuggestions();
@@ -452,7 +453,6 @@ function updateSelectionHighlight(suggestions) {
         }
     });
 }
-// --- Akhir dari event listener baru
 
 DOMElements.productSuggestions.addEventListener('click', (e) => {
     const btn = e.target.closest('.delete-suggestion');
