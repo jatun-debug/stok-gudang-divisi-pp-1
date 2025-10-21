@@ -7,7 +7,6 @@ Dibangun menggunakan **Firebase + Vanilla JS + Chart.js**.
 
 ## 🚀 Fitur Utama
 - 🔑 **Login Google** (Firebase Authentication)  
-- 🔒 **Role Admin** → hanya admin (`reyhanmuhamadrizki1@gmail.com`) yang bisa menambah/edit/hapus produk  
 - 📦 **CRUD Produk** → tambah, edit, hapus, lihat daftar produk  
 - 📑 **Pagination + Infinite Scroll** → load produk bertahap  
 - 📊 **Grafik Stok per Kategori** (Chart.js)  
