@@ -43,7 +43,18 @@ const DOMElements = {
     subtractReason: document.getElementById('subtractReason'),
     cancelSubtract: document.getElementById('cancelSubtract'),
     subtractProductIdInput: document.getElementById('subtractProductId'),
-    subtractProductAmountInput: document.getElementById('subtractProductAmount')
+    subtractProductAmountInput: document.getElementById('subtractProductAmount'),
+    // [BARU] Elemen untuk modal tambah stok
+    addModal: document.getElementById('addModal'),
+    addForm: document.getElementById('addForm'),
+    addProductName: document.getElementById('addProductName'),
+    addReason: document.getElementById('addReason'),
+    cancelAdd: document.getElementById('cancelAdd'),
+    addProductIdInput: document.getElementById('addProductId'),
+    addProductAmountInput: document.getElementById('addProductAmount'),
+    addProductNameInput: document.getElementById('addProductNameInput'),
+    addProductCategoryInput: document.getElementById('addProductCategory'),
+    addProductMinStockInput: document.getElementById('addProductMinStock')
 };
 
 const buttons = {
@@ -282,6 +293,7 @@ DOMElements.editProductForm.addEventListener('submit', async (e) => {
     }
 });
 
+// [MODIFIKASI] Event listener untuk form utama
 DOMElements.productForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!userId || !userName) return UI.showToast("Harap masukkan nama Anda.", "error");
@@ -304,12 +316,13 @@ DOMElements.productForm.addEventListener('submit', async (e) => {
         return UI.showToast("Stok minimum harus berupa angka 0 atau lebih.", "error");
     }
     
-    if (action === 'subtract') {
-        const normalizedProductName = productName.toLowerCase().replace(/\s+/g, ' ').trim();
-        const productQuery = query(collection(db, `artifacts/${appId}/public/data/products`), where("normalizedName", "==", normalizedProductName));
-        const snapshot = await getDocs(productQuery);
-        const existingDoc = snapshot.docs[0];
+    // Logika untuk mencari produk yang sudah ada
+    const normalizedProductName = productName.toLowerCase().replace(/\s+/g, ' ').trim();
+    const productQuery = query(collection(db, `artifacts/${appId}/public/data/products`), where("normalizedName", "==", normalizedProductName));
+    const snapshot = await getDocs(productQuery);
+    const existingDoc = snapshot.docs[0];
 
+    if (action === 'subtract') {
         if (!existingDoc) {
             UI.showToast("Tidak bisa mengurangi stok produk yang belum ada.", "error");
             return;
@@ -321,49 +334,25 @@ DOMElements.productForm.addEventListener('submit', async (e) => {
             return;
         }
 
+        // Tampilkan modal Kurangi Stok
         DOMElements.subtractProductIdInput.value = existingDoc.id;
         DOMElements.subtractProductAmountInput.value = amount;
         DOMElements.subtractProductName.textContent = `Produk: ${productData.name}`;
+        DOMElements.subtractReason.value = ''; // Kosongkan alasan
         UI.showModal(DOMElements.subtractModal);
-        return;
-    }
-
-    setLoadingState(buttons.add, true);
-
-    try {
-        const productQuery = query(collection(db, `artifacts/${appId}/public/data/products`), where("normalizedName", "==", productName.toLowerCase().replace(/\s+/g, ' ').trim()));
-        const snapshot = await getDocs(productQuery);
-        const existingDoc = snapshot.docs[0];
-
-        await runTransaction(db, async (transaction) => {
-            let historyType = 'penambahan';
-            if (existingDoc) {
-                const productRef = existingDoc.ref;
-                const productData = (await transaction.get(productRef)).data();
-                transaction.update(productRef, { stock: productData.stock + amount });
-            } else {
-                const newProductRef = doc(collection(db, `artifacts/${appId}/public/data/products`));
-                transaction.set(newProductRef, {
-                    name: productName,
-                    normalizedName: productName.toLowerCase().replace(/\s+/g, ' ').trim(),
-                    category,
-                    stock: amount,
-                    minStock,
-                    createdAt: serverTimestamp()
-                });
-                historyType = 'penambahan (baru)';
-            }
-            const newHistoryRef = doc(collection(db, `artifacts/${appId}/public/data/history`));
-            transaction.set(newHistoryRef, { productName, type: historyType, amount, userId: userId, userName: userName, timestamp: serverTimestamp() });
-        });
-
-        UI.showToast(`Stok untuk "${productName}" berhasil diupdate.`, "success");
-        UI.resetForm();
-    } catch (error) {
-        console.error("Transaction failed: ", error);
-        UI.showToast(typeof error === 'string' ? error : "Gagal memproses transaksi.", "error");
-    } finally {
-        resetFormButtons();
+        
+    } else if (action === 'add') {
+        
+        // [MODIFIKASI] Tampilkan modal Tambah Stok
+        DOMElements.addProductIdInput.value = existingDoc ? existingDoc.id : '';
+        DOMElements.addProductAmountInput.value = amount;
+        DOMElements.addProductNameInput.value = productName;
+        DOMElements.addProductCategoryInput.value = category;
+        DOMElements.addProductMinStockInput.value = minStock;
+        
+        DOMElements.addProductName.textContent = `Produk: ${productName}`;
+        DOMElements.addReason.value = ''; // Kosongkan alasan
+        UI.showModal(DOMElements.addModal);
     }
 });
 
@@ -404,6 +393,76 @@ DOMElements.subtractForm.addEventListener('submit', async (e) => {
     } finally {
         resetFormButtons();
     }
+});
+
+// [BARU] Event listener untuk form modal Tambah Stok
+DOMElements.addForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    // Ambil data dari hidden inputs modal
+    const id = DOMElements.addProductIdInput.value;
+    const amount = parseFloat(DOMElements.addProductAmountInput.value);
+    const reason = DOMElements.addReason.value.trim();
+    const productName = DOMElements.addProductNameInput.value;
+    const category = DOMElements.addProductCategoryInput.value;
+    const minStock = parseFloat(DOMElements.addProductMinStockInput.value);
+
+    // Gunakan pola loading state yang sudah ada
+    setLoadingState(buttons.add, true); 
+
+    try {
+        await runTransaction(db, async (transaction) => {
+            let historyType = 'penambahan';
+            if (id) { // Jika produk sudah ada
+                const productRef = doc(db, `artifacts/${appId}/public/data/products`, id);
+                const productData = (await transaction.get(productRef)).data();
+                transaction.update(productRef, { stock: productData.stock + amount });
+            } else { // Jika produk baru
+                const newProductRef = doc(collection(db, `artifacts/${appId}/public/data/products`));
+                transaction.set(newProductRef, {
+                    name: productName,
+                    normalizedName: productName.toLowerCase().replace(/\s+/g, ' ').trim(),
+                    category: category,
+                    stock: amount,
+                    minStock: minStock,
+                    createdAt: serverTimestamp()
+                });
+                historyType = 'penambahan (baru)';
+            }
+            
+            // Siapkan data riwayat
+            const newHistoryRef = doc(collection(db, `artifacts/${appId}/public/data/history`));
+            const historyData = { 
+                productName, 
+                type: historyType, 
+                amount, 
+                userId: userId, 
+                userName: userName, 
+                timestamp: serverTimestamp() 
+            };
+            
+            // [BARU] Tambahkan alasan HANYA JIKA diisi
+            if (reason) {
+                historyData.reason = reason;
+            }
+            
+            transaction.set(newHistoryRef, historyData);
+        });
+
+        UI.showToast(`Stok untuk "${productName}" berhasil diupdate.`, "success");
+        UI.closeModal(DOMElements.addModal);
+        UI.resetForm();
+    } catch (error) {
+        console.error("Transaction failed: ", error);
+        UI.showToast(typeof error === 'string' ? error : "Gagal memproses transaksi.", "error");
+    } finally {
+        resetFormButtons(); // Reset tombol form utama
+    }
+});
+
+// [BARU] Event listener untuk tombol Batal di modal Tambah Stok
+DOMElements.cancelAdd.addEventListener('click', () => {
+    UI.closeModal(DOMElements.addModal);
 });
 
 DOMElements.cancelSubtract.addEventListener('click', () => {
