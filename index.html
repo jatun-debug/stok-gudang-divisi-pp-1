@@ -89,6 +89,29 @@
         </div>
     </div>
 
+    <div id="addModal" class="modal fixed inset-0 bg-slate-900/80 flex items-center justify-center z-50 opacity-0 invisible">
+        <div class="modal-content bg-slate-800 rounded-lg shadow-xl p-6 w-11/12 max-w-sm text-center transform scale-95 opacity-0">
+            <h3 class="text-xl font-semibold mb-4 text-white">Tambah Stok</h3>
+            <p id="addProductName" class="text-sky-300 font-semibold mb-2"></p>
+            <form id="addForm" class="space-y-4">
+                <input type="hidden" id="addProductId">
+                <input type="hidden" id="addProductAmount">
+                <input type="hidden" id="addProductNameInput">
+                <input type="hidden" id="addProductCategory">
+                <input type="hidden" id="addProductMinStock">
+                
+                <div>
+                    <label for="addReason" class="block text-sm font-medium text-slate-400">Keterangan Penambahan (Opsional)</label>
+                    <textarea id="addReason" rows="3" class="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md shadow-sm"></textarea>
+                </div>
+                <div class="flex justify-center gap-4">
+                    <button type="button" id="cancelAdd" class="bg-slate-700 text-slate-200 px-6 py-2 rounded-md hover:bg-slate-600 active:scale-95 transition-all">Batal</button>
+                    <button type="submit" class="bg-green-600 text-white px-6 py-2 rounded-md hover:bg-green-700 active:scale-95 transition-all">Konfirmasi</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
     const firebaseConfig = {
     apiKey: "AIzaSyACUEZHJYVkqH1WbXSX4ra4nhpdQMbNv0U",
