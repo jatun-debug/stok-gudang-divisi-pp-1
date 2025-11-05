@@ -70,12 +70,11 @@ const originalColors = {
     subtract: ['bg-red-500', 'hover:bg-red-600']
 };
 
-// [PERUBAHAN 2]
 const originalText = {
     add: buttons.add.innerHTML,
     subtract: buttons.subtract.innerHTML,
-    confirmSubtract: buttons.confirmSubtract.innerHTML, // Disesuaikan dengan nama baru
-    confirmAdd: buttons.confirmAdd.innerHTML // Ditambahkan teks asli tombol konfirmasi tambah
+    confirmSubtract: buttons.confirmSubtract.innerHTML, // [DIUBAH] Disesuaikan dengan nama baru
+    confirmAdd: buttons.confirmAdd.innerHTML // [BARU] Teks asli tombol konfirmasi tambah
 };
 
 function resetFormButtons() {
